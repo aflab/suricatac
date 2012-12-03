@@ -91,6 +91,7 @@ sub send_suricata {
 
 	my $json;
 	my $response;
+	my $buffer;
 
 	eval {
 		$json = JSON->new->utf8->encode($msg);
@@ -98,10 +99,14 @@ sub send_suricata {
 
 		$server->send($json);
 		$json = undef;
-		$server->recv($json, 4096) or die "$@";
-		print "Response:\n",$json,"\n" if defined $opts{verbose};
 
-		$response = JSON->new->utf8->decode($json);
+		while(1) {
+			$server->recv($buffer, 4096) or die "$@";
+			$json .= $buffer;
+			print "Response:\n",$buffer,"\n" if defined $opts{verbose};
+			$response = JSON->new->utf8->decode($json) or next;
+			last;
+		}
 	};
 	if( $@ ) {
 		warn "Invalid json received: $json";
