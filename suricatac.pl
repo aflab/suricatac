@@ -24,13 +24,14 @@ use Data::Dumper;
 use JSON;
 
 
+my $TIMEOUT = 10;
 my $VERSION = "0.1";
 my $PROMPT = ">>> ";
 
 my %opts;
 
 $SIG{ALRM} = sub {
-	die "Answer not received\n";	
+	die "Response from server not received\n";	
 };
 
 GetOptions(
@@ -40,6 +41,12 @@ GetOptions(
 	'socket|s=s'
 	);
 
+if( defined $opts{version} ) {
+	print "Version: ",$VERSION,"\n";
+	exit 0;
+}
+
+
 $opts{socket} = '/usr/local/var/run/suricata/suricata-command.socket' unless defined $opts{socket};
 
 die "Invalid socket $opts{socket}: $!\n" unless -S $opts{socket};
@@ -47,7 +54,7 @@ die "Invalid socket $opts{socket}: $!\n" unless -S $opts{socket};
 my $server = IO::Socket::UNIX->new(
 					Peer  => $opts{socket},
 					Type => SOCK_STREAM,
-	                                Timeout   => 10 
+	                                Timeout   => $TIMEOUT 
 				) or die "Can't connect to $opts{socket}: $!";
 
 my ($request, $response, $suricata_request);
@@ -63,6 +70,11 @@ while($request = <STDIN>) {
 	next unless $request;
 
 	my ($cmd, @args) = split(/\s+/, $request);
+	
+	if( uc($cmd) eq 'EXIT' ) {
+		print "bye!\n";
+		last;
+	}
 
 	$suricata_request->{'command'} = $cmd;
 	$suricata_request->{'arguments'} = {};
@@ -97,9 +109,10 @@ sub send_suricata {
 	print "Request:\n",$json,"\n" if defined $opts{verbose};
 
 	$server->send($json);
-	$json = undef;
 
-	alarm 10;
+	undef $json;
+
+	alarm $TIMEOUT;
 	for(1..3) {
 		$server->recv($buffer, 4096) or die "$@";
 		$json .= $buffer;
@@ -107,7 +120,7 @@ sub send_suricata {
 		print "Response:\n",$buffer,"\n" if defined $opts{verbose};
 
 		eval {
-			$response = JSON->new->utf8->decode($json) or next;
+			$response = JSON->new->utf8->decode($json);
 		};
 		if( $@ ) {
 			warn "Invalid json received: $json";
