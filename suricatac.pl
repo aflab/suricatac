@@ -123,7 +123,7 @@ sub send_suricata {
 			$response = JSON->new->utf8->decode($json);
 		};
 		if( $@ ) {
-			warn "Invalid json received: $json";
+			warn "Invalid json received: $json" if defined $opts{verbose};
 			next;
 		}
 
